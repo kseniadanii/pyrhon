@@ -1,12 +1,9 @@
 import json
 from transformers import pipeline
-
+import torch
 
 JSON_FILE_PATH = 'comments.json'
-
 MODEL_NAME = "blanchefort/rubert-base-cased-sentiment-rusentiment"
-
-
 
 def analyze_comments(file_path, model_name):
     negative_comments_list = []
@@ -16,72 +13,49 @@ def analyze_comments(file_path, model_name):
     error_count = 0
     processed_count = 0
 
- 
-    try:
-        print(f"Загрузка модели '{model_name}'...")
+    print(f"Загрузка модели '{model_name}'...")
+    sentiment_analyzer = pipeline(
+        "sentiment-analysis",
+        model=model_name,
+        tokenizer=model_name,
+        truncation=True,
+        max_length=512, 
+        device=0 if torch.cuda.is_available() else -1
+    )
+    print(f"Модель загружена. Используется: {'GPU' if sentiment_analyzer.device.type == 'cuda' else 'CPU'}")
 
-        sentiment_analyzer = pipeline(
-            "sentiment-analysis",
-            model=model_name,
-            tokenizer=model_name,
-            truncation=True,
-            max_length=512, 
-            device=0 if torch.cuda.is_available() else -1 # GPU если доступен, иначе CPU
-        )
-        print(f"Модель загружена. Используется: {'GPU' if sentiment_analyzer.device.type == 'cuda' else 'CPU'}")
-    except Exception as e:
-        print(f"Ошибка при загрузке модели: {e}")
-        return 
-
-  
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        comments_data = data.get('users', [])
-        if not comments_data:
-            print(f"Файл '{file_path}' пуст или не содержит ключ 'users'.")
-            return
-    except Exception as e:
-        print(f"Ошибка при чтении файла '{file_path}': {e}")
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    comments_data = data.get('users', [])
+    if not comments_data:
+        print(f"Файл '{file_path}' пуст или не содержит ключ 'users'.")
         return
 
     total_comments = len(comments_data)
     print(f"\nНачинаем анализ {total_comments} комментариев...")
 
-
     for user_data in comments_data:
-        login = user_data.get('login', 'Аноним')
+        login = user_data.get('login')
         comment_text = user_data.get('comment', '')
         processed_count += 1
 
-        if not comment_text.strip():
-            neutral_count += 1 
-            print(f"Пропущен пустой комментарий от {login} ({processed_count}/{total_comments})")
-            continue
+        result = sentiment_analyzer(comment_text)[0]
+        label = result['label'].upper() 
 
-        try:
-            result = sentiment_analyzer(comment_text)[0]
-            label = result['label'].upper() 
-
-            if label == 'NEGATIVE':
-                negative_comments_list.append(f"{login}: {comment_text}")
-                negative_count += 1
-            elif label == 'POSITIVE':
-                positive_count += 1
-            elif label == 'NEUTRAL' or label == 'SPEECH': 
-                neutral_count += 1
-            else:
-                print(f"Неизвестная метка '{label}' от {login}. Считаем нейтральным.")
-                neutral_count += 1
-        except Exception as e:
-            print(f"Ошибка при анализе комментария от {login}: {e}")
-            error_count += 1
+        if label == 'NEGATIVE':
+            negative_comments_list.append(f"{login}: {comment_text}")
+            negative_count += 1
+        elif label == 'POSITIVE':
+            positive_count += 1
+        elif label == 'NEUTRAL' or label == 'SPEECH': 
+            neutral_count += 1
+        else:
+            print(f"Неизвестная метка '{label}' от {login}. Считаем нейтральным.")
+            neutral_count += 1
         
         if processed_count % 10 == 0 or processed_count == total_comments:
             print(f"Обработано {processed_count} из {total_comments} комментариев...")
 
-
-    # 4. Вывод результатов
     print("\n--- СПИСОК НЕГАТИВНЫХ КОММЕНТАРИЕВ ---")
     if negative_comments_list:
         for neg_comment in negative_comments_list:
@@ -90,12 +64,11 @@ def analyze_comments(file_path, model_name):
         print("Негативных комментариев не найдено.")
 
     print("\n--- СТАТИСТИКА КОММЕНТАРИЕВ ---")
-   
     analyzed_for_stats = positive_count + negative_count + neutral_count
     if analyzed_for_stats > 0:
         print(f"Всего комментариев в файле: {total_comments}")
         print(f"Успешно проанализировано (включая нейтральные): {analyzed_for_stats}")
-        if error_count > 0:
+        if error_count > 0: # error_count здесь всегда будет 0, так как нет try-except вокруг sentiment_analyzer
             print(f"Комментариев с ошибкой анализа: {error_count}")
         
         print(f"Позитивных: {positive_count} ({(positive_count / analyzed_for_stats) * 100:.2f}%)")
@@ -105,9 +78,6 @@ def analyze_comments(file_path, model_name):
         print(f"Всего комментариев в файле: {total_comments}, но не удалось проанализировать ни один.")
     else:
         print("Комментарии для анализа не найдены.")
-
-
-import torch 
 
 if __name__ == "__main__":
     analyze_comments(JSON_FILE_PATH, MODEL_NAME)
