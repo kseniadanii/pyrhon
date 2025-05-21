@@ -1,13 +1,13 @@
 import json
 from transformers import pipeline
 
-# --- НАСТРОЙКИ ---
-JSON_FILE_PATH = 'comments.json'
-# Используем другую популярную модель для русского языка
-MODEL_NAME = "blanchefort/rubert-base-cased-sentiment-rusentiment"
-# Эта модель возвращает: POSITIVE, NEGATIVE, NEUTRAL
 
-# --- ОСНОВНАЯ ФУНКЦИЯ АНАЛИЗА ---
+JSON_FILE_PATH = 'comments.json'
+
+MODEL_NAME = "blanchefort/rubert-base-cased-sentiment-rusentiment"
+
+
+
 def analyze_comments(file_path, model_name):
     negative_comments_list = []
     positive_count = 0
@@ -16,24 +16,24 @@ def analyze_comments(file_path, model_name):
     error_count = 0
     processed_count = 0
 
-    # 1. Загрузка модели
+ 
     try:
         print(f"Загрузка модели '{model_name}'...")
-        # Явно указываем truncation и max_length
+
         sentiment_analyzer = pipeline(
             "sentiment-analysis",
             model=model_name,
             tokenizer=model_name,
             truncation=True,
-            max_length=512, # Максимальная длина для большинства BERT-подобных моделей
+            max_length=512, 
             device=0 if torch.cuda.is_available() else -1 # GPU если доступен, иначе CPU
         )
         print(f"Модель загружена. Используется: {'GPU' if sentiment_analyzer.device.type == 'cuda' else 'CPU'}")
     except Exception as e:
         print(f"Ошибка при загрузке модели: {e}")
-        return # Выходим, если модель не загрузилась
+        return 
 
-    # 2. Загрузка комментариев
+  
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -48,27 +48,27 @@ def analyze_comments(file_path, model_name):
     total_comments = len(comments_data)
     print(f"\nНачинаем анализ {total_comments} комментариев...")
 
-    # 3. Анализ комментариев
+
     for user_data in comments_data:
         login = user_data.get('login', 'Аноним')
         comment_text = user_data.get('comment', '')
         processed_count += 1
 
         if not comment_text.strip():
-            neutral_count += 1 # Пустые считаем нейтральными или пропускаем
+            neutral_count += 1 
             print(f"Пропущен пустой комментарий от {login} ({processed_count}/{total_comments})")
             continue
 
         try:
             result = sentiment_analyzer(comment_text)[0]
-            label = result['label'].upper() # Приводим к верхнему регистру для унификации
+            label = result['label'].upper() 
 
             if label == 'NEGATIVE':
                 negative_comments_list.append(f"{login}: {comment_text}")
                 negative_count += 1
             elif label == 'POSITIVE':
                 positive_count += 1
-            elif label == 'NEUTRAL' or label == 'SPEECH': # Некоторые модели могут давать 'SPEECH'
+            elif label == 'NEUTRAL' or label == 'SPEECH': 
                 neutral_count += 1
             else:
                 print(f"Неизвестная метка '{label}' от {login}. Считаем нейтральным.")
@@ -90,7 +90,7 @@ def analyze_comments(file_path, model_name):
         print("Негативных комментариев не найдено.")
 
     print("\n--- СТАТИСТИКА КОММЕНТАРИЕВ ---")
-    # Считаем только успешно проанализированные для процентов (исключая ошибки)
+   
     analyzed_for_stats = positive_count + negative_count + neutral_count
     if analyzed_for_stats > 0:
         print(f"Всего комментариев в файле: {total_comments}")
@@ -106,9 +106,8 @@ def analyze_comments(file_path, model_name):
     else:
         print("Комментарии для анализа не найдены.")
 
-# --- ЗАПУСК АНАЛИЗА ---
-# Убедитесь, что torch импортирован для проверки cuda.is_available()
-import torch # <--- Добавлен импорт torch
+
+import torch 
 
 if __name__ == "__main__":
     analyze_comments(JSON_FILE_PATH, MODEL_NAME)
